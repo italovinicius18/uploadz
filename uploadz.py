@@ -141,6 +141,10 @@ def api(method: str, path: str, payload: dict | None = None) -> dict:
     out = _json(body)
     err = out.get("error") or {}
     if status != 200 or err.get("code") not in (None, "ok"):
+        if err.get("code") == "unaudited_client_can_only_post_to_private_accounts":
+            raise TikTokError("this app is not audited yet, so TikTok only accepts direct posts to a PRIVATE "
+                              "account. Make the account private in the TikTok app, or use --inbox to send "
+                              f"a draft instead. log_id={err.get('log_id')}")
         raise TikTokError(f"{path} failed ({status}): {err.get('code')} {err.get('message', '')} "
                           f"log_id={err.get('log_id')}")
     return out.get("data") or {}
