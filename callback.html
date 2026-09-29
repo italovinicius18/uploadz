@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><meta name="robots" content="noindex">
+<title>Uploadz - TikTok authorization</title><link rel="icon" href="uploadz-icon.png"><link rel="stylesheet" href="style.css">
+<style>#code{width:100%;font:14px ui-monospace,monospace;padding:10px;box-sizing:border-box}button{font-size:1rem;padding:8px 18px;margin-top:10px;cursor:pointer}</style>
+</head><body>
+<header><img src="uploadz-icon.png" alt="Uploadz logo"><a href="./">Uploadz</a></header>
+<div id="ok" hidden>
+<h1>TikTok account connected</h1>
+<p>Copy this authorization code and paste it into Uploadz. It expires in a few minutes and only works once.</p>
+<textarea id="code" rows="3" readonly></textarea><br>
+<button id="copy">Copy code</button> <span id="copied" hidden>Copied.</span>
+</div>
+<div id="err" hidden><h1>Authorization was not completed</h1><p id="errmsg"></p><p>Go back to Uploadz and start the login again.</p></div>
+<div id="none" hidden><h1>Nothing to show</h1><p>This page receives the result of "Continue with TikTok". Open it from Uploadz.</p></div>
+<script>
+const q=new URLSearchParams(location.search), code=q.get('code'), err=q.get('error');
+if(code){document.getElementById('ok').hidden=false;
+  // include state so the app can check it belongs to its own login attempt
+  const v=q.get('state')?code+' '+q.get('state'):code;
+  const t=document.getElementById('code'); t.value=v;
+  document.getElementById('copy').onclick=()=>{navigator.clipboard.writeText(v).then(()=>{document.getElementById('copied').hidden=false})};
+  history.replaceState(null,'',location.pathname);
+}else if(err){document.getElementById('err').hidden=false;
+  document.getElementById('errmsg').textContent=err+(q.get('error_description')?': '+q.get('error_description'):'');
+}else document.getElementById('none').hidden=false;
+</script>
+</body></html>
