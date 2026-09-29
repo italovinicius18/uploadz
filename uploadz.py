@@ -229,8 +229,13 @@ def cmd_login(args) -> None:
 
 
 def cmd_whoami(_args) -> None:
-    user = api("GET", "/v2/user/info/?fields=open_id,display_name,username,avatar_url,"
-                      "follower_count,video_count").get("user", {})
+    granted = set((load_token().get("scope") or "").split(","))
+    fields = ["open_id", "display_name", "avatar_url"]
+    if "user.info.profile" in granted:
+        fields.append("username")
+    if "user.info.stats" in granted:
+        fields += ["follower_count", "video_count"]
+    user = api("GET", "/v2/user/info/?fields=" + ",".join(fields)).get("user", {})
     info = api("POST", "/v2/post/publish/creator_info/query/", {})
     print(f"Account: {user.get('display_name')} (@{user.get('username') or info.get('creator_username')})")
     if "follower_count" in user:
@@ -329,6 +334,8 @@ def cmd_status(args) -> None:
 
 
 def cmd_videos(args) -> None:
+    if "video.list" not in (load_token().get("scope") or ""):
+        sys.exit("This connection was not granted video.list.")
     data = api("POST", "/v2/video/list/?fields=id,title,create_time,share_url,duration",
                {"max_count": args.count})
     for v in data.get("videos", []):
