@@ -6,7 +6,8 @@ Standard library only. Credentials come from the environment or from
 tokens are kept in ~/.config/uploadz/token.json (mode 600). Neither lives in
 this repository.
 
-    uploadz.py login                      # connect a TikTok account
+    uploadz.py login                      # print the TikTok link
+    uploadz.py login --code "..."         # finish with the code the callback page shows
     uploadz.py whoami                     # connected account + allowed privacy levels
     uploadz.py post clip.mp4 --privacy SELF_ONLY --caption "..."
     uploadz.py post clip.mp4 --inbox      # send to the TikTok inbox as a draft
@@ -38,6 +39,7 @@ SCOPES = os.environ.get(
 CONFIG_DIR = Path(os.environ.get("UPLOADZ_HOME", Path.home() / ".config" / "uploadz"))
 TOKEN_FILE = CONFIG_DIR / "token.json"
 CREDENTIALS_FILE = CONFIG_DIR / "credentials.env"
+STATE_FILE = CONFIG_DIR / "login_state"
 
 MB = 1024 * 1024
 MIN_CHUNK = 5 * MB  # TikTok: chunks are 5-64 MB, the last one may reach 128 MB
@@ -189,19 +191,35 @@ def authorize_url(client_key: str, state: str) -> str:
 
 # ---------------------------------------------------------------- commands
 
-def cmd_login(_args) -> None:
+def cmd_login(args) -> None:
+    """Two steps so it also works without a terminal prompt:
+    `login` prints the link and remembers its state; `login --code "..."` finishes."""
     key, secret = load_credentials()
-    state = secrets.token_urlsafe(16)
-    url = authorize_url(key, state)
-    print("Open this link, sign in with TikTok and authorize Uploadz:\n")
-    print(url + "\n")
-    print("The page you land on shows a code. Copy it and paste it here.")
-    code, got_state = parse_pasted_code(input("code> "))
+    if args.code:
+        if not STATE_FILE.exists():
+            sys.exit("No login in progress. Run: uploadz login")
+        state = STATE_FILE.read_text().strip()
+        pasted = args.code
+    else:
+        state = secrets.token_urlsafe(16)
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        fd = os.open(STATE_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(state)
+        print("Open this link, sign in with TikTok and authorize Uploadz:\n")
+        print(authorize_url(key, state) + "\n")
+        if not sys.stdin.isatty():
+            print('Then run: uploadz login --code "<what the page shows>"')
+            return
+        print("The page you land on shows a code. Copy it and paste it here.")
+        pasted = input("code> ")
+    code, got_state = parse_pasted_code(pasted)
     if got_state and got_state != state:
         sys.exit("The code belongs to a different login attempt (state mismatch). Run login again.")
     tok = oauth({"client_key": key, "client_secret": secret, "code": code,
                  "grant_type": "authorization_code", "redirect_uri": REDIRECT_URI})
     save_token(tok)
+    STATE_FILE.unlink(missing_ok=True)
     print(f"Connected. Scopes granted: {tok.get('scope')}")
     cmd_whoami(None)
 
@@ -317,7 +335,8 @@ def cmd_videos(args) -> None:
 def main(argv=None) -> None:
     p = argparse.ArgumentParser(prog="uploadz", description=__doc__.split("\n\n")[0])
     sub = p.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("login").set_defaults(fn=cmd_login)
+    lg = sub.add_parser("login"); lg.add_argument("--code", help="finish login with the code the callback page shows")
+    lg.set_defaults(fn=cmd_login)
     sub.add_parser("whoami").set_defaults(fn=cmd_whoami)
     s = sub.add_parser("status"); s.add_argument("publish_id"); s.set_defaults(fn=cmd_status)
     v = sub.add_parser("videos"); v.add_argument("--count", type=int, default=10); v.set_defaults(fn=cmd_videos)
